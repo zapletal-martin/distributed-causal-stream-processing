@@ -20,7 +20,7 @@ object WriterFactory {
 }
 
 case class Writer[K, V](
-    producer: KafkaProducer[K, V]) {
+    private val producer: KafkaProducer[K, V]) {
 
   def write(topic: String, partition: Int, key: K, value: V): Future[RecordMetadata] =
     Async.send(producer, new ProducerRecord[K, V](topic, partition, key, value))

@@ -3,6 +3,8 @@ import java.util.Properties
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, Future}
 
+import org.apache.kafka.clients.consumer.ConsumerRecord
+import org.apache.kafka.clients.producer.RecordMetadata
 import org.apache.kafka.common.serialization.{Deserializer, Serializer, StringDeserializer, StringSerializer}
 
 object Program extends App {
@@ -27,13 +29,33 @@ object Program extends App {
     ReaderFactory.create[String, String](topic, props)(keyDeserializer, valueDeserializer).get
 
   val writer =
-    WriterFactory.create[String, String](viewTopic, props)(keySerializer, valueSerializer).get
+    WriterFactory.create[String, String](props)(keySerializer, valueSerializer).get
 
-  def program() = Merger.merge[String, String](reader, Processor.process, writer, viewTopic, 0)
+  def program(committable: Seq[Future[CommittableReader[String, String]]]) = {
+    val merged: Future[Seq[ConsumerRecord[String, String]]] = Future.sequence(committable)
+      .map(c => Merger.merge[String, String](c.map(_.consumerRecords)))
+
+    val processor = Processor.process[String, String]
+    val views: Future[Seq[Seq[ConsumerRecord[String, String]]]] = merged.map(processor)
+    val written: Future[Seq[Seq[RecordMetadata]]] =
+      views.flatMap(f =>
+        Future.sequence(f.map(vws =>
+          Future.sequence(
+            vws.map(r => writer.write(viewTopic, 0, r.key(), r.value()))))))
+
+    val a: String = written.map(_ => committable.map(_.map(_.commit())))
+
+    program()
+  }
 
   // TODO: Do we need this to be tailrec or will the call happen in separate stack anyway?
-  def runProgram(): Future[Unit] =
-    program().flatMap(_ => runProgram())
+  def runProgram(): Future[Unit] = {
+    val committable = Seq(
+      Future(reader.poll()),
+      Future(reader.poll()))
+
+    program(committable).flatMap(_ => runProgram())
+  }
 
   Await.result(runProgram(), Duration.Inf)
 }
