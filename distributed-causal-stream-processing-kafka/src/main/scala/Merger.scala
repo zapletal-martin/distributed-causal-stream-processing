@@ -9,6 +9,7 @@ object Merger {
       records: Seq[ConsumerRecords[K, V]]
     )(implicit ec: ExecutionContext
     ): Seq[ConsumerRecord[K, V]] = {
+    println(s"Merging $records")
     records.flatMap(_.iterator().asScala)
   }
 

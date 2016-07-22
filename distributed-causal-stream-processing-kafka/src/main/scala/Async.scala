@@ -14,14 +14,17 @@ object Async {
     ): Future[Map[TopicPartition, OffsetAndMetadata]] = {
     val promise = Promise[Map[TopicPartition, OffsetAndMetadata]]()
 
-    consumer.commitAsync{
+    println("Commit async")
+    consumer.commitAsync(
       new OffsetCommitCallback {
         override def onComplete(
             offsets: util.Map[TopicPartition, OffsetAndMetadata],
-            exception: Exception): Unit =
+            exception: Exception): Unit = {
+          println(s"Commit $offsets $exception")
           Option(exception).fold(promise.trySuccess(offsets.asScala.toMap))(promise.tryFailure)
+        }
       }
-    }
+    )
 
     promise.future
   }
@@ -37,9 +40,11 @@ object Async {
       new Callback() {
         override def onCompletion(
             metadata: RecordMetadata,
-            exception: Exception): Unit =
+            exception: Exception): Unit = {
+          println(s"Send $metadata $exception")
           Option(exception).fold(promise.trySuccess(metadata))(promise.tryFailure)
-       }
+        }
+      }
     )
 
     promise.future

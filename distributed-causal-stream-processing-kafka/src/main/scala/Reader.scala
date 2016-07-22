@@ -45,7 +45,7 @@ final case class CommittableReader[K, V] private (
   extends Reader {
 
   def commit()(implicit ec: ExecutionContext): Future[PollableReader[K, V]] =
-    Async.commit(consumer).map(_ => PollableReader(consumer))
+    Async.  commit(consumer).map(_ => PollableReader(consumer))
 }
 
 final case class PollableReader[K, V] private (
@@ -53,7 +53,7 @@ final case class PollableReader[K, V] private (
   extends Reader {
 
   // We must not commit the offset until processed
-  def poll(): CommittableReader[K, V] =
-    // TODO: Configurable
-    CommittableReader(consumer, consumer.poll(100L))
+  def poll(timeout: Long): CommittableReader[K, V] = {
+    CommittableReader(consumer, consumer.poll(timeout))
+  }
 }

@@ -31,31 +31,38 @@ object Program extends App {
   val writer =
     WriterFactory.create[String, String](props)(keySerializer, valueSerializer).get
 
-  def program(committable: Seq[Future[CommittableReader[String, String]]]) = {
-    val merged: Future[Seq[ConsumerRecord[String, String]]] = Future.sequence(committable)
-      .map(c => Merger.merge[String, String](c.map(_.consumerRecords)))
+  def program(
+      timeout: Long,
+      committable: Seq[CommittableReader[String, String]]
+    ): Future[Seq[PollableReader[String, String]]] = {
+
+    println("program!")
+
+    val merged: Seq[ConsumerRecord[String, String]] =
+      Merger.merge[String, String](committable.map(_.consumerRecords))
 
     val processor = Processor.process[String, String]
-    val views: Future[Seq[Seq[ConsumerRecord[String, String]]]] = merged.map(processor)
+    val views: Seq[Seq[ConsumerRecord[String, String]]] = processor(merged)
+
     val written: Future[Seq[Seq[RecordMetadata]]] =
-      views.flatMap(f =>
-        Future.sequence(f.map(vws =>
-          Future.sequence(
-            vws.map(r => writer.write(viewTopic, 0, r.key(), r.value()))))))
+      Future.sequence(views.map(vws =>
+        Future.sequence(
+          vws.map(r => writer.write(viewTopic, 0, r.key(), r.value())))))
 
-    val a: String = written.map(_ => committable.map(_.map(_.commit())))
+    val committed: Future[Seq[PollableReader[String, String]]] =
+      written.flatMap { com => println(s"Committed $com"); Future.sequence(committable.map(_.commit()))}
 
-    program()
+    committed.flatMap { r => println("Running program!"); program(timeout, r.map(_.poll(timeout))) }
   }
 
   // TODO: Do we need this to be tailrec or will the call happen in separate stack anyway?
-  def runProgram(): Future[Unit] = {
+  def runProgram(timeout: Long): Future[Seq[PollableReader[String, String]]] = {
     val committable = Seq(
-      Future(reader.poll()),
-      Future(reader.poll()))
+      reader.poll(timeout),
+      reader.poll(timeout))
 
-    program(committable).flatMap(_ => runProgram())
+    program(timeout, committable)
   }
 
-  Await.result(runProgram(), Duration.Inf)
+  Await.result(runProgram(1000L), Duration.Inf)
 }

@@ -11,5 +11,8 @@ object Processor {
 
   // TODO: View allocation logic
   def process[K, V]: Processor[K, V] =
-    records => records.map(Seq(_))
+    records => {
+      println(s"Processing $records")
+      records.map(Seq(_))
+    }
 }
