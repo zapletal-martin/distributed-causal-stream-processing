@@ -3,7 +3,8 @@ import java.util.Properties
 import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
 
-import org.apache.kafka.clients.consumer.{ConsumerRecords, KafkaConsumer}
+import org.apache.kafka.clients.consumer.{OffsetAndMetadata, ConsumerRecords, KafkaConsumer}
+import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.serialization.Deserializer
 
 object ReaderFactory {
@@ -44,9 +45,26 @@ final case class CommittableReader[K, V] private (
     consumerRecords: ConsumerRecords[K, V])
   extends Reader {
 
-  def commit()(implicit ec: ExecutionContext): Future[PollableReader[K, V]] =
-    Async.  commit(consumer).map(_ => PollableReader(consumer))
+  def commit(
+      pollTimeout: Long
+    )(implicit ec: ExecutionContext
+    ): Future[CommittableReader[K, V]] = {
+
+    val future = if (consumerRecords.isEmpty) {
+      Future.successful(Map.empty[TopicPartition, OffsetAndMetadata])
+    } else {
+      Async.commit(consumer)
+    }
+
+    // This is needed. Unfortunately commitAsync request is not sent
+    // asynchronously by the Kafka client, only with the next poll.
+    // http://grokbase.com/t/kafka/users/1625ezxyc4/new-client-commitasync-problem
+    val poll = consumer.poll(pollTimeout)
+    println(s"Polled ${poll.iterator().asScala.toList}")
+    future.map(_ => CommittableReader(consumer, poll))
+  }
 }
+
 
 final case class PollableReader[K, V] private (
     private val consumer: KafkaConsumer[K, V])

@@ -1,18 +1,20 @@
-import scala.collection.JavaConverters._
-import scala.concurrent.{ExecutionContext, Future}
-
-import org.apache.kafka.clients.consumer.{ConsumerRecord, ConsumerRecords}
-import org.apache.kafka.clients.producer.RecordMetadata
+import org.apache.kafka.clients.consumer.ConsumerRecord
 
 // Apply transformations
 object Processor {
+  final case class ViewRecord[K, V](
+    records: Seq[ConsumerRecord[K, V]],
+    topic: String,
+    partition: Int)
+
   type Processor[K, V] =
-    (Seq[ConsumerRecord[K, V]]) => Seq[Seq[ConsumerRecord[K, V]]]
+    (Seq[ConsumerRecord[K, V]]) => Seq[ViewRecord[K, V]]
 
   // TODO: View allocation logic
   def process[K, V]: Processor[K, V] =
     records => {
-      println(s"Processing $records")
-      records.map(Seq(_))
+        Seq(
+          ViewRecord(records, "viewTopic", 0),
+          ViewRecord(records, "viewTopic2", 0))
     }
 }

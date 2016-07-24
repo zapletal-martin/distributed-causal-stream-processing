@@ -14,13 +14,12 @@ object Async {
     ): Future[Map[TopicPartition, OffsetAndMetadata]] = {
     val promise = Promise[Map[TopicPartition, OffsetAndMetadata]]()
 
-    println("Commit async")
     consumer.commitAsync(
       new OffsetCommitCallback {
         override def onComplete(
             offsets: util.Map[TopicPartition, OffsetAndMetadata],
             exception: Exception): Unit = {
-          println(s"Commit $offsets $exception")
+          println(s"Committed $offsets $exception")
           Option(exception).fold(promise.trySuccess(offsets.asScala.toMap))(promise.tryFailure)
         }
       }
