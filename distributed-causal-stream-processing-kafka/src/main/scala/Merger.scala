@@ -5,25 +5,8 @@ import org.apache.kafka.clients.consumer.{ConsumerRecord, ConsumerRecords}
 
 object Merger {
 
-  final def merge[K, V](
-      records: Seq[ConsumerRecords[K, V]]
-    )(implicit ec: ExecutionContext
-    ): Seq[ConsumerRecord[K, V]] = {
-    println(s"Merging $records")
+  type Merger[K, V] = Seq[ConsumerRecords[K, V]] =>  Seq[ConsumerRecord[K, V]]
+
+  final def merger[K, V]: Merger[K, V] = records =>
     records.flatMap(_.iterator().asScala)
-  }
-
-  /*final def merge[K, V](
-      pollableReader: PollableReader[K, V],
-      processor: Processor.Processor[K, V],
-      writer: Writer[K, V],
-      topic: String,
-      partition: Int
-    )(implicit ec: ExecutionContext): Future[Unit] = {
-
-    val committableReader = pollableReader.poll()
-
-    processor(writer, committableReader.consumerRecords, topic, partition)
-      .map(_ => committableReader.commit())
-  }*/
 }

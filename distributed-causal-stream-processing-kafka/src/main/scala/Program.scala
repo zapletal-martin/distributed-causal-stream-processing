@@ -3,7 +3,10 @@ import java.util.Properties
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, Future}
 
-import Processor.ViewRecord
+import _root_.Processor.{Processor, ViewRecord}
+import _root_.Merger.Merger
+import _root_.Writer.Writer
+import kafka.common.TopicAndPartition
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.clients.producer.RecordMetadata
 import org.apache.kafka.common.serialization.{Deserializer, Serializer, StringDeserializer, StringSerializer}
@@ -27,27 +30,23 @@ object Program extends App {
 
   import scala.concurrent.ExecutionContext.Implicits.global
 
-  val reader =
-    ReaderFactory.create[String, String](topic, props)(keyDeserializer, valueDeserializer).get
-
-  val writer =
-    WriterFactory.create[String, String](props)(keySerializer, valueSerializer).get
-
   def program(
       timeout: Long,
-      committable: Seq[CommittableReader[String, String]]
+      committable: Seq[CommittableReader[String, String]],
+      merger: Merger[String, String],
+      processor: Processor[String, String],
+      writer: Writer[String, String],
     ): Future[Seq[PollableReader[String, String]]] = {
 
     val merged: Seq[ConsumerRecord[String, String]] =
-      Merger.merge[String, String](committable.map(_.consumerRecords))
+      merger(committable.map(_.consumerRecords))
 
-    val processor = Processor.process[String, String]
     val views: Seq[ViewRecord[String, String]] = processor(merged)
 
     val written: Future[Seq[Seq[RecordMetadata]]] =
       Future.sequence(views.map(vws =>
         Future.sequence(
-          vws.records.map(r => writer.write(vws.topic, vws.partition, r.key(), r.value())))))
+          vws.records.map(r => writer(vws.topic, vws.partition, r.key(), r.value())))))
 
     val committed: Future[Seq[CommittableReader[String, String]]] =
       written.flatMap { com =>
@@ -55,14 +54,24 @@ object Program extends App {
       }
 
     committed.flatMap { r =>
-      program(timeout, r)
+      program(timeout, r, merger, processor, writer)
     }
   }
 
-  // http://grokbase.com/t/kafka/users/1625ezxyc4/new-client-commitasync-problem
   // TODO: Do we need this to be tailrec or will the call happen in separate stack anyway?
-  def runProgram(timeout: Long): Future[Seq[PollableReader[String, String]]] =
-    program(timeout, Seq(reader.poll(timeout)))
+  def runProgram(timeout: Long): Future[Seq[PollableReader[String, String]]] = {
+    val reader =
+      ReaderFactory.create[String, String](topic, props)(keyDeserializer, valueDeserializer).get
+
+    program(
+      timeout,
+      Seq(reader.poll(timeout)),
+      Merger.merger[String, String],
+      Processor.processor[String, String](
+        TopicAndPartition(viewTopic, 0),
+        TopicAndPartition(viewTopic2, 0)),
+      Writer.create[String, String](props)(keySerializer, valueSerializer).get)
+  }
 
   Await.result(runProgram(5000L), Duration.Inf)
 }

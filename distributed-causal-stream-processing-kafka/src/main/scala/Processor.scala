@@ -1,3 +1,4 @@
+import kafka.common.TopicAndPartition
 import org.apache.kafka.clients.consumer.ConsumerRecord
 
 // Apply transformations
@@ -11,10 +12,10 @@ object Processor {
     (Seq[ConsumerRecord[K, V]]) => Seq[ViewRecord[K, V]]
 
   // TODO: View allocation logic
-  def process[K, V]: Processor[K, V] =
+  def processor[K, V](view1: TopicAndPartition, view2: TopicAndPartition): Processor[K, V] =
     records => {
         Seq(
-          ViewRecord(records, "viewTopic", 0),
-          ViewRecord(records, "viewTopic2", 0))
+          ViewRecord(records, view1.topic, view1.partition),
+          ViewRecord(records, view2.topic, view2.partition))
     }
 }
