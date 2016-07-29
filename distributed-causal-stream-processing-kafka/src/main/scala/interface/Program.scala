@@ -25,27 +25,22 @@ object Program {
     )(implicit ec: ExecutionContext
     ): Future[Seq[PollableReader[KV]]] = {
 
-    val merger = implicitly[Merger[KV]]
-    val processor = implicitly[Processor[KV]]
-    val writer = implicitly[Writer[KV]]
+    println(Thread.currentThread().getStackTrace().mkString(","))
 
     val merged: Seq[ConsumerRecord[KV#K, KV#V]] =
-      merger(readers.map(_.consumerRecords))
+      implicitly[Merger[KV]].apply(readers.map(_.consumerRecords))
 
-    val views: Seq[ViewRecord[KV]] = processor(merged)
+    val views: Seq[ViewRecord[KV]] = implicitly[Processor[KV]].apply(merged)
 
     val written: Future[Seq[Seq[RecordMetadata]]] =
       Future.sequence(views.map(vws =>
         Future.sequence(
-          vws.records.map(r => writer(vws.topic, vws.partition, r.key(), r.value())))))
+          vws.records.map(r =>
+            implicitly[Writer[KV]].apply(vws.topic, vws.partition, r.key(), r.value())))))
 
     val committed: Future[Seq[CommittableReader[KV]]] =
-      written.flatMap { com =>
-        Future.sequence(readers.map(_.commit(timeout)))
-      }
+      written.flatMap(com => Future.sequence(readers.map(_.commit(timeout))))
 
-    committed.flatMap { r =>
-      runInternal(timeout)(r)
-    }
+    committed.flatMap(runInternal(timeout)(_))
   }
 }
