@@ -1,8 +1,8 @@
 package impl
 
 import kafka.common.TopicAndPartition
-import lib.KeyValue
-import lib.Processor.{Processor, ViewRecord}
+import interface.KeyValue
+import interface.Processor.{Processor, ViewRecord}
 
 object ProcessorImpl {
 

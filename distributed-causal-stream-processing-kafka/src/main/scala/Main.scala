@@ -5,8 +5,8 @@ import scala.concurrent.duration.Duration
 
 import impl.{MergerImpl, ProcessorImpl}
 import kafka.common.TopicAndPartition
-import lib.KeyValue.{KeyDeserializer, KeySerializer, ValueDeserializer, ValueSerializer}
-import lib._
+import interface.KeyValue.{KeyDeserializer, KeySerializer, ValueDeserializer, ValueSerializer}
+import interface._
 import org.apache.kafka.common.serialization.{StringDeserializer, StringSerializer}
 
 object Main extends App {

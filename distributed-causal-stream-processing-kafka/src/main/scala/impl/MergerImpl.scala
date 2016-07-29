@@ -2,8 +2,8 @@ package impl
 
 import scala.collection.JavaConverters._
 
-import lib.KeyValue
-import lib.Merger.Merger
+import interface.KeyValue
+import interface.Merger.Merger
 
 object MergerImpl {
 
