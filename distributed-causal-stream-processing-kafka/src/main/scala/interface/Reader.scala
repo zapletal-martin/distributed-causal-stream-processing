@@ -6,6 +6,7 @@ import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
 
 import interface.KeyValue.{KeyDeserializer, ValueDeserializer}
+import interface.recovery.{ExactlyOnceDeliveryConsumerRebalanceListener, ExactlyOnceDeliveryRecovery, InputRecovery}
 import org.apache.kafka.clients.consumer.{ConsumerRecords, KafkaConsumer, OffsetAndMetadata}
 import org.apache.kafka.common.TopicPartition
 
@@ -14,6 +15,7 @@ object ReaderFactory {
   def create[KV <: KeyValue : KeyDeserializer : ValueDeserializer](
       topic: String,
       properties: Properties
+    )(implicit ec: ExecutionContext
     ): Option[PollableReader[KV]] = {
 
     Option(properties.getProperty("enable.auto.commit"))
@@ -36,7 +38,12 @@ object ReaderFactory {
         consumer.subscribe(
           Set(topic).asJava,
           // TODO: Use persistenceId partitioner
-          new ExactlyOnceDeliveryConsumerRebalanceListener(ExactlyOnceDeliveryRecovery(_ => 0)))
+          new ExactlyOnceDeliveryConsumerRebalanceListener(
+            ExactlyOnceDeliveryRecovery[KV](
+              1000L,
+              (_, _) => new TopicPartition("", 0),
+              Seq(),
+              InputRecovery(null))))
 
         PollableReader(consumer)
       }
