@@ -1,7 +1,7 @@
 import java.util.Properties
 
+import scala.concurrent.Await
 import scala.concurrent.duration.Duration
-import scala.concurrent.{Await, ExecutionContext}
 
 import impl.{MergerImpl, WriterImpl}
 import interface._
@@ -30,23 +30,18 @@ object Main extends App {
   val viewTopic = "viewTopic"
   val viewTopic2 = "viewTopic2"
 
-  trait KV extends KeyValue {
+  case class KVImpl(key: String, value: String) extends KeyValue {
     override type V = String
     override type K = String
-
-    def key: K
-    def value: V
   }
 
-  case class KVImpl(key: String, value: String) extends KV
-
-  implicit val deserializer: InputDeserializer[KVImpl] = new InputDeserializer[KVImpl] {
+  implicit val deserializer: KVDeserializer[KVImpl] = new KVDeserializer[KVImpl] {
     override def deserializer: (String, String) => KVImpl = (a, b) => KVImpl(a, b)
     override def keyDeserializer: Deserializer[String] = new StringDeserializer()
     override def valueDeserializer: Deserializer[String] = new StringDeserializer()
   }
 
-  implicit val serializer: ViewSerializer[KVImpl] = new ViewSerializer[KVImpl] {
+  implicit val serializer: KVSerializer[KVImpl] = new KVSerializer[KVImpl] {
     override def serializer: (KVImpl) => (String, String) = kvImpl => (kvImpl.key, kvImpl.value)
     override def valueSerializer: Serializer[String] = new StringSerializer()
     override def keySerializer: Serializer[String] = new StringSerializer()
@@ -55,11 +50,11 @@ object Main extends App {
   val reader1 =
     ReaderFactory.create[KVImpl](
       topic,
-      readerProps("group1"))(deserializer, implicitly[ExecutionContext]).get
+      readerProps("group1")).get
   val reader2 =
     ReaderFactory.create[KVImpl](
       topic,
-      readerProps("group2"))(deserializer, implicitly[ExecutionContext]).get
+      readerProps("group2")).get
 
   val inputs = Seq(reader1, reader2)
 
@@ -69,7 +64,7 @@ object Main extends App {
     View[KVImpl](r => ViewRecord(r, viewTopic, 0), r => r.record),
     View[KVImpl](r => ViewRecord(r, viewTopic2, 0), r => r.record))
 
-  implicit val writer = WriterImpl.create[KVImpl](writerProps)(serializer).get
+  implicit val writer = WriterImpl.create[KVImpl](writerProps).get
 
   Await.result(Program.run(timeout)(inputs, views), Duration.Inf)
 }

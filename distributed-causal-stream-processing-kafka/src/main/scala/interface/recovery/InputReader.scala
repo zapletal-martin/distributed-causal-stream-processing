@@ -1,4 +1,3 @@
-/*
 package interface.recovery
 
 import scala.collection.JavaConverters._
@@ -41,4 +40,3 @@ final case class InputReader[KV <: KeyValue] private (
       .toSeq
   }
 }
-*/

@@ -1,4 +1,3 @@
-/*
 package interface.recovery
 
 import java.util
@@ -6,7 +5,7 @@ import java.util
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
 
-import interface.KeyValue
+import interface.{KVSerializer, KVDeserializer, ViewRecord, KeyValue}
 import org.apache.kafka.clients.consumer.{ConsumerRebalanceListener, ConsumerRecord}
 import org.apache.kafka.clients.producer.RecordMetadata
 import org.apache.kafka.common.TopicPartition
@@ -21,7 +20,7 @@ import org.apache.kafka.common.TopicPartition
 
 // so need - view references, partitioner to find viewEvent => topic and partition
 // of the original stream, committable reader from original stream, reader from view
-class ExactlyOnceDeliveryConsumerRebalanceListener[KV <: KeyValue](
+class ExactlyOnceDeliveryConsumerRebalanceListener[KV <: KeyValue : KVDeserializer : KVSerializer](
     exactlyOnceDeliveryRecovery: ExactlyOnceDeliveryRecovery[KV]
   )(implicit ec: ExecutionContext)
   extends ConsumerRebalanceListener {
@@ -34,7 +33,7 @@ class ExactlyOnceDeliveryConsumerRebalanceListener[KV <: KeyValue](
         .reader
         .lastCommitedMessageInEachAssignedPartition(exactlyOnceDeliveryRecovery.timeout)
 
-    val update: Iterable[Seq[Future[RecordMetadata]]] =
+    val update: Iterable[Seq[Future[Unit]]] =
       lastCommitted.map(commited =>
         exactlyOnceDeliveryRecovery
           .views
@@ -48,16 +47,21 @@ class ExactlyOnceDeliveryConsumerRebalanceListener[KV <: KeyValue](
 
             found.map(
               _.find(r =>
-                v.inverseTransformation(
-                  r.key(), r.value()) == (commited.key(), commited.value())))
+                v.view.inverseTransformation(
+                  ViewRecord(
+                    // TODO: ViewDeserializer
+                    implicitly[KVDeserializer[KV]].deserializer(r.key(), r.value()),
+                    r.topic(),
+                    r.partition())) ==
+                      (commited.key(), commited.value())))
 
-            val processed = v.processor(commited.key(), commited.value())
+            val processed = v.view.transformation(
+              implicitly[KVDeserializer[KV]].deserializer(commited.key(), commited.value()))
 
             v.viewWriter(
-              v.view.topic,
-              v.view.partition,
-              processed._1,
-              processed._2)
+              v.viewTopicAndPartition.topic,
+              v.viewTopicAndPartition.partition,
+              processed.record)
           })
 
     // We need to await here. The kafka consumer would otherwise start
@@ -68,4 +72,3 @@ class ExactlyOnceDeliveryConsumerRebalanceListener[KV <: KeyValue](
   // I don't think we need this
   override def onPartitionsRevoked(partitions: util.Collection[TopicPartition]): Unit = { }
 }
-*/

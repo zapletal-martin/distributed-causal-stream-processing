@@ -10,7 +10,7 @@ import org.apache.kafka.common.TopicPartition
 
 object ReaderFactory {
 
-  def create[KV <: KeyValue : InputDeserializer](
+  def create[KV <: KeyValue : KVDeserializer](
       topic: String,
       properties: Properties
     )(implicit ec: ExecutionContext
@@ -30,8 +30,8 @@ object ReaderFactory {
         val consumer =
           new KafkaConsumer[KV#K, KV#V](
             p,
-            implicitly[InputDeserializer[KV]].keyDeserializer,
-            implicitly[InputDeserializer[KV]].valueDeserializer)
+            implicitly[KVDeserializer[KV]].keyDeserializer,
+            implicitly[KVDeserializer[KV]].valueDeserializer)
 
         consumer.subscribe(
           Set(topic).asJava)
@@ -49,16 +49,16 @@ object ReaderFactory {
 }
 
 sealed trait Reader {
-  def deserialise[KV <: KeyValue : InputDeserializer](
+  def deserialise[KV <: KeyValue : KVDeserializer](
       records: ConsumerRecords[KV#K, KV#V]
     ): Seq[KV] =
     records
       .asScala
       .toSeq
-      .map(r => implicitly[InputDeserializer[KV]].deserializer(r.key(), r.value()))
+      .map(r => implicitly[KVDeserializer[KV]].deserializer(r.key(), r.value()))
 }
 
-final case class CommittableReader[KV <: KeyValue : InputDeserializer] private (
+final case class CommittableReader[KV <: KeyValue : KVDeserializer] private (
     private val consumer: KafkaConsumer[KV#K, KV#V],
     consumerRecords: Seq[KV])
   extends Reader {
@@ -82,7 +82,7 @@ final case class CommittableReader[KV <: KeyValue : InputDeserializer] private (
 }
 
 
-final case class PollableReader[KV <: KeyValue : InputDeserializer] private (
+final case class PollableReader[KV <: KeyValue : KVDeserializer] private (
     private val consumer: KafkaConsumer[KV#K, KV#V])
   extends Reader {
 
