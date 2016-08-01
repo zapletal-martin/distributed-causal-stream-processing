@@ -1,3 +1,4 @@
+/*
 package impl
 
 import kafka.common.TopicAndPartition
@@ -16,3 +17,4 @@ object ProcessorImpl {
         ViewRecord(records, view2.topic, view2.partition))
     }
 }
+*/

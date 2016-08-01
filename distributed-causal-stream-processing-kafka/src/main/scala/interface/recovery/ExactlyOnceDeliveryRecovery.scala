@@ -1,3 +1,4 @@
+/*
 package interface.recovery
 
 import interface.KeyValue
@@ -19,3 +20,4 @@ case class ExactlyOnceDeliveryRecovery[KV <: KeyValue](
     inversePartitioner: (KV#K, KV#V) => TopicPartition,
     views: Seq[ViewRecovery[KV]],
     input: InputRecovery[KV])
+*/

@@ -3,44 +3,49 @@ package interface
 import scala.concurrent.{ExecutionContext, Future}
 
 import interface.Merger._
-import interface.Processor._
 import interface.Writer._
-import org.apache.kafka.clients.consumer.ConsumerRecord
-import org.apache.kafka.clients.producer.RecordMetadata
 
 object Program {
 
-  def run[KV <: KeyValue : Merger : Processor : Writer](
+  def run[KV <: KeyValue : Merger : Writer](
       timeout: Long
-    )(readers: Seq[PollableReader[KV]]
+    )(readers: Seq[PollableReader[KV]],
+      views: Set[View[KV]]
     )(implicit ec: ExecutionContext
     ): Future[Seq[PollableReader[KV]]] = {
 
-    runInternal(timeout)(readers.map(_.poll(timeout)))
+    runInternal(timeout)(readers.map(_.poll(timeout)), views)
   }
 
-  private def runInternal[KV <: KeyValue : Merger : Processor : Writer](
+  private def runInternal[KV <: KeyValue : Merger : Writer](
       timeout: Long
-    )(readers: Seq[CommittableReader[KV]]
+    )(readers: Seq[CommittableReader[KV]],
+      views: Set[View[KV]]
     )(implicit ec: ExecutionContext
     ): Future[Seq[PollableReader[KV]]] = {
 
     println(Thread.currentThread().getStackTrace().mkString(","))
 
-    val merged: Seq[ConsumerRecord[KV#K, KV#V]] =
+    val merged: Seq[KV] =
       implicitly[Merger[KV]].apply(readers.map(_.consumerRecords))
 
-    val views: Seq[ViewRecord[KV]] = implicitly[Processor[KV]].apply(merged)
-
-    val written: Future[Seq[Seq[RecordMetadata]]] =
-      Future.sequence(views.map(vws =>
+    val written = Future.sequence(
+      merged.map { m =>
         Future.sequence(
-          vws.records.map(r =>
-            implicitly[Writer[KV]].apply(vws.topic, vws.partition, r.key(), r.value())))))
+          views.map{ w =>
+            val transformed = w.transformation(m)
+            implicitly[Writer[KV]].apply(
+              transformed.topic,
+              transformed.partition,
+              transformed.record)
+          }
+        )
+      }
+    )
 
     val committed: Future[Seq[CommittableReader[KV]]] =
       written.flatMap(com => Future.sequence(readers.map(_.commit(timeout))))
 
-    committed.flatMap(runInternal(timeout)(_))
+    committed.flatMap(runInternal(timeout)(_, views))
   }
 }

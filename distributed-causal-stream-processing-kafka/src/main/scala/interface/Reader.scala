@@ -5,14 +5,12 @@ import java.util.Properties
 import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
 
-import interface.KeyValue.{KeyDeserializer, ValueDeserializer}
-import interface.recovery.{ExactlyOnceDeliveryConsumerRebalanceListener, ExactlyOnceDeliveryRecovery, InputRecovery}
 import org.apache.kafka.clients.consumer.{ConsumerRecords, KafkaConsumer, OffsetAndMetadata}
 import org.apache.kafka.common.TopicPartition
 
 object ReaderFactory {
 
-  def create[KV <: KeyValue : KeyDeserializer : ValueDeserializer](
+  def create[KV <: KeyValue : InputDeserializer](
       topic: String,
       properties: Properties
     )(implicit ec: ExecutionContext
@@ -32,29 +30,37 @@ object ReaderFactory {
         val consumer =
           new KafkaConsumer[KV#K, KV#V](
             p,
-            implicitly[KeyDeserializer[KV]],
-            implicitly[ValueDeserializer[KV]])
+            implicitly[InputDeserializer[KV]].keyDeserializer,
+            implicitly[InputDeserializer[KV]].valueDeserializer)
 
         consumer.subscribe(
-          Set(topic).asJava,
+          Set(topic).asJava)
           // TODO: Use persistenceId partitioner
-          new ExactlyOnceDeliveryConsumerRebalanceListener(
+          /*new ExactlyOnceDeliveryConsumerRebalanceListener(
             ExactlyOnceDeliveryRecovery[KV](
               1000L,
               (_, _) => new TopicPartition("", 0),
               Seq(),
-              InputRecovery(null))))
+              InputRecovery(null))))*/
 
         PollableReader(consumer)
       }
   }
 }
 
-sealed trait Reader
+sealed trait Reader {
+  def deserialise[KV <: KeyValue : InputDeserializer](
+      records: ConsumerRecords[KV#K, KV#V]
+    ): Seq[KV] =
+    records
+      .asScala
+      .toSeq
+      .map(r => implicitly[InputDeserializer[KV]].deserializer(r.key(), r.value()))
+}
 
-final case class CommittableReader[KV <: KeyValue] private (
+final case class CommittableReader[KV <: KeyValue : InputDeserializer] private (
     private val consumer: KafkaConsumer[KV#K, KV#V],
-    consumerRecords: ConsumerRecords[KV#K, KV#V])
+    consumerRecords: Seq[KV])
   extends Reader {
 
   def commit(
@@ -71,18 +77,17 @@ final case class CommittableReader[KV <: KeyValue] private (
     // This is needed. Unfortunately commitAsync request is not sent
     // asynchronously by the Kafka client, only with the next poll.
     // http://grokbase.com/t/kafka/users/1625ezxyc4/new-client-commitasync-problem
-    val poll = consumer.poll(pollTimeout)
-    future.map(_ => CommittableReader(consumer, poll))
+    future.map(_ => CommittableReader[KV](consumer, deserialise(consumer.poll(pollTimeout))))
   }
 }
 
 
-final case class PollableReader[KV <: KeyValue] private (
+final case class PollableReader[KV <: KeyValue : InputDeserializer] private (
     private val consumer: KafkaConsumer[KV#K, KV#V])
   extends Reader {
 
   // We must not commit the offset until processed
   def poll(timeout: Long): CommittableReader[KV] = {
-    CommittableReader(consumer, consumer.poll(timeout))
+    CommittableReader(consumer, deserialise(consumer.poll(timeout)))
   }
 }

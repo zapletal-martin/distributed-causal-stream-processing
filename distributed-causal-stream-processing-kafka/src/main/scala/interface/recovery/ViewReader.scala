@@ -1,3 +1,4 @@
+/*
 package interface.recovery
 
 import scala.collection.JavaConverters._
@@ -89,3 +90,4 @@ final case class ViewReader[KV <: KeyValue] private (
     }
   }
 }
+*/

@@ -7,10 +7,14 @@ trait KeyValue {
   type V
 }
 
-object KeyValue {
+trait InputDeserializer[KV <: KeyValue] {
+  def keyDeserializer: Deserializer[KV#K]
+  def valueDeserializer: Deserializer[KV#V]
+  def deserializer: (KV#K, KV#V) => KV
+}
 
-  type KeyDeserializer[KV <: KeyValue] = Deserializer[KV#K]
-  type ValueDeserializer[KV <: KeyValue] = Deserializer[KV#V]
-  type KeySerializer[KV <: KeyValue] = Serializer[KV#K]
-  type ValueSerializer[KV <: KeyValue] = Serializer[KV#V]
+trait ViewSerializer[KV <: KeyValue] {
+  def keySerializer: Serializer[KV#K]
+  def valueSerializer: Serializer[KV#V]
+  def serializer: KV => (KV#K, KV#V)
 }

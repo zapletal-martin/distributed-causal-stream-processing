@@ -1,3 +1,4 @@
+/*
 package interface.recovery
 
 import java.util
@@ -38,7 +39,6 @@ class ExactlyOnceDeliveryConsumerRebalanceListener[KV <: KeyValue](
         exactlyOnceDeliveryRecovery
           .views
           .map { v =>
-
             val found = v.viewReader.findLastInViewFromPartition(
               exactlyOnceDeliveryRecovery.timeout,
               new TopicPartition(
@@ -46,14 +46,19 @@ class ExactlyOnceDeliveryConsumerRebalanceListener[KV <: KeyValue](
                 commited.partition()),
               exactlyOnceDeliveryRecovery.inversePartitioner)
 
-          val processed = v.processor(commited.key(), commited.value())
+            found.map(
+              _.find(r =>
+                v.inverseTransformation(
+                  r.key(), r.value()) == (commited.key(), commited.value())))
 
-          v.viewWriter(
-            v.view.topic,
-            v.view.partition,
-            processed._1,
-            processed._2)
-        })
+            val processed = v.processor(commited.key(), commited.value())
+
+            v.viewWriter(
+              v.view.topic,
+              v.view.partition,
+              processed._1,
+              processed._2)
+          })
 
     // We need to await here. The kafka consumer would otherwise start
     // consuming before the operation is completed asynchronously
@@ -63,3 +68,4 @@ class ExactlyOnceDeliveryConsumerRebalanceListener[KV <: KeyValue](
   // I don't think we need this
   override def onPartitionsRevoked(partitions: util.Collection[TopicPartition]): Unit = { }
 }
+*/
