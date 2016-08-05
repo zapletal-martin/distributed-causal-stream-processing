@@ -7,7 +7,7 @@ import interface.{Async, KVSerializer, KeyValue}
 import org.apache.kafka.clients.producer.{ProducerRecord, KafkaProducer}
 
 object WriterImpl {
-  def create[KV <: KeyValue : KVSerializer](
+  def apply[KV <: KeyValue : KVSerializer](
       properties: Properties
     ): Option[Writer[KV]] = {
     Some(
@@ -18,7 +18,7 @@ object WriterImpl {
           implicitly[KVSerializer[KV]].valueSerializer)))
   }
 
-  def writer[KV <: KeyValue : KVSerializer](
+  private def writer[KV <: KeyValue : KVSerializer](
       producer: KafkaProducer[KV#K, KV#V]
     ): Writer[KV] = (topic, partition, keyValue) => {
     val (k, v) = implicitly[KVSerializer[KV]].serializer(keyValue)

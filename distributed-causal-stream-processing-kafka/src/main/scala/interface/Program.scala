@@ -3,6 +3,7 @@ package interface
 import scala.concurrent.{ExecutionContext, Future}
 
 import interface.Merger._
+import interface.Reader.{CommittableReader, PollableReader}
 import interface.Writer._
 
 object Program {
@@ -23,11 +24,19 @@ object Program {
       views: Set[View[KV]]
     )(implicit ec: ExecutionContext
     ): Future[Seq[PollableReader[KV]]] = {
-
     println(Thread.currentThread().getStackTrace().mkString(","))
+    applyViewLogic(timeout)(readers, views).flatMap(runInternal(timeout)(_, views))
+  }
+
+  def applyViewLogic[KV <: KeyValue : Merger : Writer](
+      timeout: Long
+    )(readers: Seq[CommittableReader[KV]],
+      views: Set[View[KV]]
+    )(implicit ec: ExecutionContext
+    ): Future[Seq[CommittableReader[KV]]] = {
 
     val merged: Seq[KV] =
-      implicitly[Merger[KV]].apply(readers.map(_.consumerRecords))
+      implicitly[Merger[KV]].apply(readers.map(_.records))
 
     val written = Future.sequence(
       merged.map { m =>
@@ -43,9 +52,6 @@ object Program {
       }
     )
 
-    val committed: Future[Seq[CommittableReader[KV]]] =
-      written.flatMap(com => Future.sequence(readers.map(_.commit(timeout))))
-
-    committed.flatMap(runInternal(timeout)(_, views))
+    written.flatMap(com => Future.sequence(readers.map(_.commit(timeout))))
   }
 }

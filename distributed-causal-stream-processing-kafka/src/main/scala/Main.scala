@@ -3,7 +3,7 @@ import java.util.Properties
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
 
-import impl.{MergerImpl, WriterImpl}
+import impl.{ReaderImpl, MergerImpl, WriterImpl}
 import interface._
 import org.apache.kafka.common.serialization.{Deserializer, Serializer, StringDeserializer, StringSerializer}
 
@@ -48,11 +48,11 @@ object Main extends App {
   }
 
   val reader1 =
-    ReaderFactory.create[KVImpl](
+    ReaderImpl[KVImpl](
       topic,
       readerProps("group1")).get
   val reader2 =
-    ReaderFactory.create[KVImpl](
+    ReaderImpl[KVImpl](
       topic,
       readerProps("group2")).get
 
@@ -64,7 +64,7 @@ object Main extends App {
     View[KVImpl](r => ViewRecord(r, viewTopic, 0), r => r.record),
     View[KVImpl](r => ViewRecord(r, viewTopic2, 0), r => r.record))
 
-  implicit val writer = WriterImpl.create[KVImpl](writerProps).get
+  implicit val writer = WriterImpl[KVImpl](writerProps).get
 
   Await.result(Program.run(timeout)(inputs, views), Duration.Inf)
 }
