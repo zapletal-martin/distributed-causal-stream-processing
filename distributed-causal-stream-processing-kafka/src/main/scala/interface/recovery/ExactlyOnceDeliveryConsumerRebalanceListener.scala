@@ -20,8 +20,8 @@ import org.apache.kafka.common.TopicPartition
 
 // so need - view references, partitioner to find viewEvent => topic and partition
 // of the original stream, committable reader from original stream, reader from view
-class ExactlyOnceDeliveryConsumerRebalanceListener[KV <: KeyValue : KVDeserializer : KVSerializer](
-    exactlyOnceDeliveryRecovery: ExactlyOnceDeliveryRecovery[KV]
+class ExactlyOnceDeliveryConsumerRebalanceListener[KV <: KeyValue : KVDeserializer : KVSerializer, R](
+    exactlyOnceDeliveryRecovery: ExactlyOnceDeliveryRecovery[KV, R]
   )(implicit ec: ExecutionContext)
   extends ConsumerRebalanceListener {
 
@@ -33,11 +33,11 @@ class ExactlyOnceDeliveryConsumerRebalanceListener[KV <: KeyValue : KVDeserializ
         .reader
         .lastCommitedMessageInEachAssignedPartition(exactlyOnceDeliveryRecovery.timeout)
 
-    val update: Iterable[Seq[Future[Unit]]] =
+    val update: Iterable[Seq[Future[R]]] =
       lastCommitted.map(commited =>
         exactlyOnceDeliveryRecovery
           .views
-          .map { v =>
+          .flatMap { v =>
             val found = v.viewReader.findLastInViewFromPartition(
               exactlyOnceDeliveryRecovery.timeout,
               new TopicPartition(
@@ -58,10 +58,13 @@ class ExactlyOnceDeliveryConsumerRebalanceListener[KV <: KeyValue : KVDeserializ
             val processed = v.view.transformation(
               implicitly[KVDeserializer[KV]].deserializer(commited.key(), commited.value()))
 
-            v.viewWriter(
-              v.viewTopicAndPartition.topic,
-              v.viewTopicAndPartition.partition,
-              processed.record)
+            processed.fold[Seq[Future[R]]](Seq.empty) { p =>
+              Seq(
+                v.viewWriter(
+                  v.viewTopicAndPartition.topic,
+                  v.viewTopicAndPartition.partition,
+                  p.record))
+            }
           })
 
     // We need to await here. The kafka consumer would otherwise start

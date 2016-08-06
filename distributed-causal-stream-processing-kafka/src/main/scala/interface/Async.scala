@@ -33,8 +33,8 @@ object Async {
   def send[K, V](
       producer: KafkaProducer[K, V],
       record: ProducerRecord[K, V]
-    ): Future[Unit] = {
-    val promise = Promise[Unit]()
+    ): Future[RecordMetadata] = {
+    val promise = Promise[RecordMetadata]()
 
     producer.send(
       record,
@@ -42,7 +42,7 @@ object Async {
         override def onCompletion(
             metadata: RecordMetadata,
             exception: Exception): Unit = {
-          Option(exception).fold(promise.trySuccess(()))(promise.tryFailure)
+          Option(exception).fold(promise.trySuccess(metadata))(promise.tryFailure)
         }
       }
     )

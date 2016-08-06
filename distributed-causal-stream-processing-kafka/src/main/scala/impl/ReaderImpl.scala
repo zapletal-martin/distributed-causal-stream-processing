@@ -45,7 +45,7 @@ object ReaderImpl {
             Seq(),
             InputRecovery(null))))*/
 
-        PollableReaderImpl(ConsumerWrapper(consumer))
+        PollableReaderImpl(KafkaConsumerWrapper(consumer))
       }
   }
 
@@ -68,7 +68,7 @@ final case class CommittableReaderImpl[KV <: KeyValue : KVDeserializer] private 
   )(implicit ec: ExecutionContext
   ): Future[CommittableReader[KV]] = {
 
-    val future = if (records.isEmpty) {
+    val committed = if (records.isEmpty) {
       Future.successful(Map.empty[TopicPartition, OffsetAndMetadata])
     } else {
       consumer.commit()
@@ -77,7 +77,11 @@ final case class CommittableReaderImpl[KV <: KeyValue : KVDeserializer] private 
     // This is needed. Unfortunately commitAsync request is not sent
     // asynchronously by the Kafka client, only with the next poll.
     // http://grokbase.com/t/kafka/users/1625ezxyc4/new-client-commitasync-problem
-    future.map(_ => CommittableReaderImpl[KV](consumer, deserialise(consumer.poll(pollTimeout))))
+    val pollResult = consumer.poll(pollTimeout)
+
+    committed
+      .flatMap(_ =>
+        pollResult.map(pr => CommittableReaderImpl[KV](consumer, deserialise(pr))))
   }
 }
 
@@ -87,6 +91,9 @@ final case class PollableReaderImpl[KV <: KeyValue : KVDeserializer] private (
   extends PollableReader[KV] {
 
   // We must not commit the offset until processed
-  def poll(timeout: Long): CommittableReader[KV] =
-    CommittableReaderImpl(consumer, deserialise(consumer.poll(timeout)))
+  override def poll(
+      timeout: Long
+    )(implicit ec: ExecutionContext
+    ): Future[CommittableReader[KV]] =
+    consumer.poll(timeout).map(pr => CommittableReaderImpl(consumer, deserialise(pr)))
 }

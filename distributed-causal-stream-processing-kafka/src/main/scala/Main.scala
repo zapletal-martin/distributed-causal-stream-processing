@@ -3,7 +3,7 @@ import java.util.Properties
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
 
-import impl.{ReaderImpl, MergerImpl, WriterImpl}
+import impl.{MergerImpl, ReaderImpl, WriterImpl}
 import interface._
 import org.apache.kafka.common.serialization.{Deserializer, Serializer, StringDeserializer, StringSerializer}
 
@@ -61,8 +61,8 @@ object Main extends App {
   implicit val merger = MergerImpl.merger[KVImpl]
 
   val views = Set(
-    View[KVImpl](r => ViewRecord(r, viewTopic, 0), r => r.record),
-    View[KVImpl](r => ViewRecord(r, viewTopic2, 0), r => r.record))
+    View[KVImpl](r => Some(ViewRecord(r, viewTopic, 0)), r => r.record),
+    View[KVImpl](r => Some(ViewRecord(r, viewTopic2, 0)), r => r.record))
 
   implicit val writer = WriterImpl[KVImpl](writerProps).get
 

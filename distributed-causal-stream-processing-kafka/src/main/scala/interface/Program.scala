@@ -8,50 +8,61 @@ import interface.Writer._
 
 object Program {
 
-  def run[KV <: KeyValue : Merger : Writer](
+  def run[KV <: KeyValue : Merger, R](
       timeout: Long
     )(readers: Seq[PollableReader[KV]],
       views: Set[View[KV]]
-    )(implicit ec: ExecutionContext
+    )(implicit writer: Writer[KV, R],
+      ec: ExecutionContext
     ): Future[Seq[PollableReader[KV]]] = {
-
-    runInternal(timeout)(readers.map(_.poll(timeout)), views)
+    Future.sequence(readers.map(_.poll(timeout))).flatMap(pr => runInternal(timeout)(pr, views))
   }
 
-  private def runInternal[KV <: KeyValue : Merger : Writer](
+  private def runInternal[KV <: KeyValue : Merger, R](
       timeout: Long
     )(readers: Seq[CommittableReader[KV]],
       views: Set[View[KV]]
-    )(implicit ec: ExecutionContext
+    )(implicit writer: Writer[KV, R],
+      ec: ExecutionContext
     ): Future[Seq[PollableReader[KV]]] = {
+
     println(Thread.currentThread().getStackTrace().mkString(","))
-    applyViewLogic(timeout)(readers, views).flatMap(runInternal(timeout)(_, views))
+
+    applyViewLogicAndCommit(timeout)(readers, views)
+      .flatMap(runInternal(timeout)(_, views))
   }
 
-  def applyViewLogic[KV <: KeyValue : Merger : Writer](
+  def applyViewLogicAndCommit[KV <: KeyValue : Merger, R](
       timeout: Long
     )(readers: Seq[CommittableReader[KV]],
       views: Set[View[KV]]
-    )(implicit ec: ExecutionContext
-    ): Future[Seq[CommittableReader[KV]]] = {
+    )(implicit writer: Writer[KV, R],
+      ec: ExecutionContext
+    ): Future[Seq[CommittableReader[KV]]] =
+    applyViewLogic(timeout)(readers, views)
+      .flatMap(com => Future.sequence(readers.map(_.commit(timeout))))
 
-    val merged: Seq[KV] =
-      implicitly[Merger[KV]].apply(readers.map(_.records))
-
-    val written = Future.sequence(
-      merged.map { m =>
+  def applyViewLogic[KV <: KeyValue : Merger, R](
+      timeout: Long
+    )(readers: Seq[CommittableReader[KV]],
+      views: Set[View[KV]]
+    )(implicit writer: Writer[KV, R],
+      ec: ExecutionContext
+    ): Future[Set[Seq[R]]] =
+    Future.sequence(
+      views.map{ w =>
         Future.sequence(
-          views.map{ w =>
+          implicitly[Merger[KV]].apply(readers.map(_.records)).flatMap { m =>
             val transformed = w.transformation(m)
-            implicitly[Writer[KV]].apply(
-              transformed.topic,
-              transformed.partition,
-              transformed.record)
+            transformed.fold[Seq[Future[R]]](Seq.empty) { t =>
+              Seq(
+                implicitly[Writer[KV, R]].apply(
+                  t.topic,
+                  t.partition,
+                  t.record))
+            }
           }
         )
       }
     )
-
-    written.flatMap(com => Future.sequence(readers.map(_.commit(timeout))))
-  }
 }

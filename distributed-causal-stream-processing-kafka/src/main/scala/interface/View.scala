@@ -1,5 +1,5 @@
 package interface
 
 case class View[KV <: KeyValue](
-    transformation: KV => ViewRecord[KV],
+    transformation: KV => Option[ViewRecord[KV]],
     inverseTransformation: ViewRecord[KV] => KV)

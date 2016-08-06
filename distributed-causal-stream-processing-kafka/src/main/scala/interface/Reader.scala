@@ -6,14 +6,13 @@ object Reader {
   trait CommittableReader[KV <: KeyValue] {
     def commit(
         pollTimeout: Long
-    )(implicit ec: ExecutionContext
-    ): Future[CommittableReader[KV]]
+      )(implicit ec: ExecutionContext
+      ): Future[CommittableReader[KV]]
 
     def records: Seq[KV]
   }
 
-
   trait PollableReader[KV <: KeyValue] {
-    def poll(timeout: Long): CommittableReader[KV]
+    def poll(timeout: Long)(implicit ec: ExecutionContext): Future[CommittableReader[KV]]
   }
 }
