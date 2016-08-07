@@ -61,8 +61,12 @@ object Main extends App {
   implicit val merger = MergerImpl.merger[KVImpl]
 
   val views = Set(
-    View[KVImpl](r => Some(ViewRecord(r, viewTopic, 0)), r => r.record),
-    View[KVImpl](r => Some(ViewRecord(r, viewTopic2, 0)), r => r.record))
+    View[KVImpl](r =>
+      Some(
+        ViewRecord(KVImpl(r.key, r.value.toUpperCase()), viewTopic, 0)), _.record),
+    View[KVImpl](r =>
+      Some(
+        ViewRecord(KVImpl(r.key, r.value + r.value), viewTopic2, 0)), _.record))
 
   implicit val writer = WriterImpl[KVImpl](writerProps).get
 

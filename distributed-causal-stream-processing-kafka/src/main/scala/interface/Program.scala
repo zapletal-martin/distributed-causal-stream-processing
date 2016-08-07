@@ -26,7 +26,9 @@ object Program {
       ec: ExecutionContext
     ): Future[Seq[PollableReader[KV]]] = {
 
-    println(Thread.currentThread().getStackTrace().mkString(","))
+    println("-------------------------------------------------------")
+    println(Thread.currentThread().getStackTrace().mkString("\r\n"))
+    println("-------------------------------------------------------")
 
     applyViewLogicAndCommit(timeout)(readers, views)
       .flatMap(runInternal(timeout)(_, views))

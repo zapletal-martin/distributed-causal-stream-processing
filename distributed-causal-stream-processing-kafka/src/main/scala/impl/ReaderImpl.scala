@@ -3,7 +3,7 @@ package impl
 import java.util.Properties
 
 import scala.collection.JavaConverters._
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future, Promise}
 
 import impl.ReaderImpl._
 import interface.Reader.{CommittableReader, PollableReader}
@@ -71,13 +71,31 @@ final case class CommittableReaderImpl[KV <: KeyValue : KVDeserializer] private 
     val committed = if (records.isEmpty) {
       Future.successful(Map.empty[TopicPartition, OffsetAndMetadata])
     } else {
+      println("COMMITTING")
       consumer.commit()
     }
 
     // This is needed. Unfortunately commitAsync request is not sent
     // asynchronously by the Kafka client, only with the next poll.
     // http://grokbase.com/t/kafka/users/1625ezxyc4/new-client-commitasync-problem
-    val pollResult = consumer.poll(pollTimeout)
+    // Unfortunately the synchronization is difficult so we may need to try .poll()
+    // multiple times to ensure commit completed
+    // TODO: Is it worth it? Can we continue without committing safely or
+    // TODO: commit synchronously instead?
+    val promise = Promise[Unit]()
+    committed.onComplete(_ => promise.trySuccess(()))
+
+    def pollUntilCommitted(): Future[ConsumerRecords[KV#K, KV#V]] = {
+      consumer.poll(pollTimeout).flatMap { result =>
+        if (promise.isCompleted) {
+          Future.successful(result)
+        } else {
+          pollUntilCommitted()
+        }
+      }
+    }
+
+    val pollResult = pollUntilCommitted()
 
     committed
       .flatMap(_ =>
