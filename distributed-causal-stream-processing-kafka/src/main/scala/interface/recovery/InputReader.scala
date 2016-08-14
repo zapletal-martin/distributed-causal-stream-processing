@@ -1,42 +1,39 @@
 package interface.recovery
 
-import scala.collection.JavaConverters._
-import interface.KeyValue
-import org.apache.kafka.clients.consumer.{ConsumerRecord, ConsumerRecords, KafkaConsumer}
+import interface.{KVDeserializer, KeyValue}
+import kafka.api.{FetchRequest, OffsetFetchRequest, PartitionFetchInfo}
+import kafka.common.TopicAndPartition
+import kafka.consumer.SimpleConsumer
+import org.apache.kafka.clients.consumer.{ConsumerRecord, KafkaConsumer}
 
-final case class InputReader[KV <: KeyValue] private (
-    private val consumer: KafkaConsumer[KV#K, KV#V]) {
+final case class InputReader[KV <: KeyValue : KVDeserializer] private (
+    private val consumer: KafkaConsumer[KV#K, KV#V],
+    // SimpleConsumer is used, because in the 0.9 KafkaConsumer
+    // finding message with last committed offset for a different group
+    // (using the same group seems to trigger rebalance recursively)
+    // is not very convenient
+    private val simpleConsumer: SimpleConsumer) {
 
   def lastCommitedMessageInEachAssignedPartition(
-      timeout: Long
+      timeout: Long,
+      topicPartition: Seq[TopicAndPartition],
+      group: String
     ): Iterable[ConsumerRecord[KV#K, KV#V]] = {
 
-    // Seek the last commited offset for each input partition and read event
-    consumer
-    .assignment()
-    .asScala
-    .map(pos =>
-      pos -> (
-        consumer
-        .position(pos) - 1))
-    .foreach(prevPos =>
-      consumer.seek(prevPos._1, prevPos._2))
+    val offset = simpleConsumer.fetchOffsets(new OffsetFetchRequest(group, topicPartition))
 
-    val lastCommitted =
-      consumer
-        .poll(timeout)
-        .asScala
+    val requestInfo = offset.requestInfo
 
-    lastPerTopicPartition(lastCommitted)
-  }
+    val response = simpleConsumer.fetch(
+      new FetchRequest(requestInfo =
+        requestInfo.map { case (tp, of) =>
+            tp -> PartitionFetchInfo(of.offset, Int.MaxValue)
+        }))
 
-  // TODO: Dedup
-  private def lastPerTopicPartition(
-      topicPartitions: Iterable[ConsumerRecord[KV#K, KV#V]]
-    ): Iterable[ConsumerRecord[KV#K, KV#V]] = {
-    topicPartitions
-      .groupBy(r => (r.topic(), r.partition()))
-      .map(r => r._2.maxBy(_.offset()))
-      .toSeq
+    val all = response.data
+      .flatMap { case (tp, data) => data.messages.iterator.toSeq.map(tp -> _) }
+      .map(SimpleConsumerDeserialization.deserialize[KV])
+
+    SimpleConsumerDeserialization.firstPerTopicPartition(all)
   }
 }

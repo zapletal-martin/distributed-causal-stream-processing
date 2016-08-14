@@ -3,8 +3,9 @@ package interface
 import org.apache.kafka.common.serialization.{Deserializer, Serializer}
 
 trait KeyValue {
-  type K
-  type V
+  // K and V can both be null, because they are used with Kafka api
+  type K >: Null
+  type V >: Null
 }
 
 trait KVDeserializer[KV <: KeyValue] {

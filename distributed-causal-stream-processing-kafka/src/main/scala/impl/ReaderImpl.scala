@@ -8,16 +8,21 @@ import scala.concurrent.{ExecutionContext, Future, Promise}
 import impl.ReaderImpl._
 import interface.Reader.{CommittableReader, PollableReader}
 import interface._
+import interface.recovery._
 import org.apache.kafka.clients.consumer.{ConsumerRecords, KafkaConsumer, OffsetAndMetadata}
 import org.apache.kafka.common.TopicPartition
 
 object ReaderImpl {
 
-  def apply[KV <: KeyValue : KVDeserializer](
-    topic: String,
-    properties: Properties
-  )(implicit ec: ExecutionContext
-  ): Option[PollableReader[KV]] = {
+  def apply[KV <: KeyValue : KVDeserializer : KVSerializer, R](
+      timeout: Long,
+      recoveryTimeout: Long
+    )(topic: String,
+      properties: Properties,
+      viewRecovery: Seq[ViewRecovery[KV, R]],
+      inputRecovery: InputRecovery[KV]
+    )(implicit ec: ExecutionContext
+    ): Option[PollableReader[KV]] = {
 
     Option(properties.getProperty("enable.auto.commit"))
       .fold[Option[Properties]] {
@@ -36,14 +41,14 @@ object ReaderImpl {
             implicitly[KVDeserializer[KV]].valueDeserializer)
 
         consumer.subscribe(
-          Set(topic).asJava)
+          Set(topic).asJava,
         // TODO: Use persistenceId partitioner
-        /*new ExactlyOnceDeliveryConsumerRebalanceListener(
-          ExactlyOnceDeliveryRecovery[KV](
-            1000L,
-            (_, _) => new TopicPartition("", 0),
-            Seq(),
-            InputRecovery(null))))*/
+          new ExactlyOnceDeliveryConsumerRebalanceListener(
+            ExactlyOnceDeliveryRecovery[KV, R](
+              recoveryTimeout,
+              _ => new TopicPartition("topic", 0),
+              viewRecovery,
+              inputRecovery)))
 
         PollableReaderImpl(KafkaConsumerWrapper(consumer))
       }

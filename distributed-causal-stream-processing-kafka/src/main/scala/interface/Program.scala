@@ -52,7 +52,12 @@ object Program {
       ec: ExecutionContext
     ): Future[Set[Seq[R]]] =
     Future.sequence(
-      views.map{ w =>
+      views.zip(0 to 1).map{ w2 =>
+        val (w, i) = w2
+        if (i != 0) {
+          println("Writer sleeping")
+          Thread.sleep(5000)
+        }
         Future.sequence(
           implicitly[Merger[KV]].apply(readers.map(_.records)).flatMap { m =>
             val transformed = w.transformation(m)
