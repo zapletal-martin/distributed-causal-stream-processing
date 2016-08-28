@@ -20,7 +20,8 @@ object Async {
       new OffsetCommitCallback {
         override def onComplete(
             offsets: util.Map[TopicPartition, OffsetAndMetadata],
-            exception: Exception): Unit = {
+            exception: Exception
+          ): Unit = {
           println(s"Committed $offsets $exception")
           Option(exception).fold(promise.trySuccess(offsets.asScala.toMap))(promise.tryFailure)
         }
@@ -41,7 +42,8 @@ object Async {
       new Callback() {
         override def onCompletion(
             metadata: RecordMetadata,
-            exception: Exception): Unit = {
+            exception: Exception
+          ): Unit = {
           Option(exception).fold(promise.trySuccess(metadata))(promise.tryFailure)
         }
       }

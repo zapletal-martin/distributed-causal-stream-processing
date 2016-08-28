@@ -103,7 +103,7 @@ object Main extends App {
 
   val recoveryConsumer =
     new KafkaConsumer[String, String](
-      readerProps("r1"),
+      readerProps("group1"),
       implicitly[KVDeserializer[KVImpl]].keyDeserializer,
       implicitly[KVDeserializer[KVImpl]].valueDeserializer)
 

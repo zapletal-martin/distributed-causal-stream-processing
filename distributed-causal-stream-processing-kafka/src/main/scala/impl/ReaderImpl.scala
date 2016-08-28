@@ -48,7 +48,8 @@ object ReaderImpl {
               recoveryTimeout,
               _ => new TopicPartition("topic", 0),
               viewRecovery,
-              inputRecovery)))
+              inputRecovery),
+            consumer))
 
         PollableReaderImpl(KafkaConsumerWrapper(consumer))
       }
@@ -91,10 +92,13 @@ final case class CommittableReaderImpl[KV <: KeyValue : KVDeserializer] private 
     committed.onComplete(_ => promise.trySuccess(()))
 
     def pollUntilCommitted(): Future[ConsumerRecords[KV#K, KV#V]] = {
+      println("pollUntilCommitted")
       consumer.poll(pollTimeout).flatMap { result =>
         if (promise.isCompleted) {
+          println(s"pollUntilCommitted result success ${result.iterator().asScala.mkString("|")}")
           Future.successful(result)
         } else {
+          println("pollUntilCommitted result again")
           pollUntilCommitted()
         }
       }

@@ -1,10 +1,12 @@
 package interface.recovery
 
 import interface.{KVDeserializer, KeyValue}
-import kafka.api.{FetchRequest, OffsetFetchRequest, PartitionFetchInfo}
-import kafka.common.TopicAndPartition
+import kafka.api._
+import kafka.common.{OffsetAndMetadata, TopicAndPartition}
 import kafka.consumer.SimpleConsumer
-import org.apache.kafka.clients.consumer.{ConsumerRecord, KafkaConsumer}
+import org.apache.kafka.clients.consumer.{Consumer, ConsumerRecord, KafkaConsumer}
+import org.apache.kafka.common.TopicPartition
+import scala.collection.JavaConverters._
 
 final case class InputReader[KV <: KeyValue : KVDeserializer] private (
     private val consumer: KafkaConsumer[KV#K, KV#V],
@@ -35,5 +37,18 @@ final case class InputReader[KV <: KeyValue : KVDeserializer] private (
       .map(SimpleConsumerDeserialization.deserialize[KV])
 
     SimpleConsumerDeserialization.firstPerTopicPartition(all)
+  }
+
+  def commit(
+      consumer: KafkaConsumer[KV#K, KV#V],
+      topicPartition: Map[TopicAndPartition, OffsetAndMetadata],
+      group: String
+    ): Unit = {
+
+    consumer.commitSync(
+      topicPartition.map { case(tp, om) =>
+        new TopicPartition(tp.topic, tp.partition) -> new org.apache.kafka.clients.consumer.OffsetAndMetadata(om.offset, om.metadata)}.asJava)
+
+    // simpleConsumer.commitOffsets(new OffsetCommitRequest(group, topicPartition))
   }
 }

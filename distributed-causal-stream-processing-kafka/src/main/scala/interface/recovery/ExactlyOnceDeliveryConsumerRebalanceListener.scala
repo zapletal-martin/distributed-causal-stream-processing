@@ -5,10 +5,9 @@ import java.util
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
 
-import interface.{KVSerializer, KVDeserializer, ViewRecord, KeyValue}
-import kafka.consumer.SimpleConsumer
-import org.apache.kafka.clients.consumer.{ConsumerRebalanceListener, ConsumerRecord}
-import org.apache.kafka.clients.producer.RecordMetadata
+import interface.{KVDeserializer, KVSerializer, KeyValue, ViewRecord}
+import kafka.common.{OffsetAndMetadata, TopicAndPartition}
+import org.apache.kafka.clients.consumer.{ConsumerRebalanceListener, ConsumerRecord, KafkaConsumer}
 import org.apache.kafka.common.TopicPartition
 
 
@@ -22,7 +21,8 @@ import org.apache.kafka.common.TopicPartition
 // so need - view references, partitioner to find viewEvent => topic and partition
 // of the original stream, committable reader from original stream, reader from view
 class ExactlyOnceDeliveryConsumerRebalanceListener[KV <: KeyValue : KVDeserializer : KVSerializer, R](
-    exactlyOnceDeliveryRecovery: ExactlyOnceDeliveryRecovery[KV, R]
+    exactlyOnceDeliveryRecovery: ExactlyOnceDeliveryRecovery[KV, R],
+    consumer: KafkaConsumer[KV#K, KV#V]
   )(implicit ec: ExecutionContext)
   extends ConsumerRebalanceListener {
 
@@ -67,7 +67,7 @@ class ExactlyOnceDeliveryConsumerRebalanceListener[KV <: KeyValue : KVDeserializ
                 val original = implicitly[KVDeserializer[KV]]
                   .deserializer(commited.key(), commited.value())
 
-                println(s"Comparing ${v.viewTopicAndPartition.topic} -> $inverted vs ${(commited.key(), commited.value())}")
+                println(s"Comparing ${v.viewTopicAndPartition.topic} -> $inverted vs $original")
                 inverted != original
               })
 
@@ -88,9 +88,40 @@ class ExactlyOnceDeliveryConsumerRebalanceListener[KV <: KeyValue : KVDeserializ
     // We need to await here. The kafka consumer would otherwise start
     // consuming before the operation is completed asynchronously
     Await.result(Future.sequence(update.map(Future.sequence(_))), 10.seconds)
-
     // TODO: HANDLE CASE OF MULTIPLE RECORDS MISSING (TWO+ RECORDS PUBLISHED TO ONE VIEW BUT NOT OTHER)
     // TODO: Commit inputs!
+
+    val toCommit = lastCommitted
+      .map(l => TopicAndPartition(l.topic(), l.partition()) -> OffsetAndMetadata(l.offset() + 1))
+      .groupBy(_._1)
+      .map(x => x._2.maxBy(_._2.offset))
+
+
+    println(s"BEFORE COMMITS ${exactlyOnceDeliveryRecovery
+      .input
+      .reader
+      .lastCommitedMessageInEachAssignedPartition(
+        exactlyOnceDeliveryRecovery.timeout,
+        exactlyOnceDeliveryRecovery.input.inputTopicsAndPartitions,
+        exactlyOnceDeliveryRecovery.input.inputGroup)}")
+
+    println(s"To Commit $toCommit, group ${exactlyOnceDeliveryRecovery.input.inputGroup}")
+
+    val committed = exactlyOnceDeliveryRecovery.input.reader.commit(
+      consumer,
+      toCommit,
+      exactlyOnceDeliveryRecovery.input.inputGroup)
+
+    println(s"COMMITTED $committed")
+
+    println(s"AFTER COMMITS ${exactlyOnceDeliveryRecovery
+      .input
+      .reader
+      .lastCommitedMessageInEachAssignedPartition(
+        exactlyOnceDeliveryRecovery.timeout,
+        exactlyOnceDeliveryRecovery.input.inputTopicsAndPartitions,
+        exactlyOnceDeliveryRecovery.input.inputGroup)}")
+
     println("Rebalance done")
   }
 
