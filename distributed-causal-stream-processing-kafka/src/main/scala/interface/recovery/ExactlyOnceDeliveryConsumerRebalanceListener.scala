@@ -18,8 +18,11 @@ import org.apache.kafka.common.TopicPartition
 // Update views that are not up to date if any
 // Continue reading from next offset.
 
-// so need - view references, partitioner to find viewEvent => topic and partition
-// of the original stream, committable reader from original stream, reader from view
+// We should really
+// Find missing records from each partition in each view
+// E.g. go backwards in each partition until we find the last from that partition in our view
+// Run merger and processor on the missing records (we need to ensure same ordering as in
+// all the other views where the records were already published), publish, commit
 class ExactlyOnceDeliveryConsumerRebalanceListener[KV <: KeyValue : KVDeserializer : KVSerializer, R](
     exactlyOnceDeliveryRecovery: ExactlyOnceDeliveryRecovery[KV, R],
     consumer: KafkaConsumer[KV#K, KV#V]
@@ -89,7 +92,6 @@ class ExactlyOnceDeliveryConsumerRebalanceListener[KV <: KeyValue : KVDeserializ
     // consuming before the operation is completed asynchronously
     Await.result(Future.sequence(update.map(Future.sequence(_))), 10.seconds)
     // TODO: HANDLE CASE OF MULTIPLE RECORDS MISSING (TWO+ RECORDS PUBLISHED TO ONE VIEW BUT NOT OTHER)
-    // TODO: Commit inputs!
 
     val toCommit = lastCommitted
       .map(l => TopicAndPartition(l.topic(), l.partition()) -> OffsetAndMetadata(l.offset() + 1))
