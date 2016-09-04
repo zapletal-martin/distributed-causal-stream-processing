@@ -25,12 +25,14 @@ trait ViewReaderBehaviour[KV <: KeyValue] {
       offset: Long
     ): ViewReader[KV] = {
 
-    val response = simpleConsumer.fetch(new FetchRequest(requestInfo =
-      Map(topicAndPartition -> PartitionFetchInfo(offset, Int.MaxValue))
-    ))
+    val response = simpleConsumer
+      .fetch(
+        new FetchRequest(requestInfo =
+          Map(topicAndPartition -> PartitionFetchInfo(offset, Int.MaxValue))))
 
     println(s"View poll $topicAndPartition -> $offset")
-    val all = response.data
+    val all = response
+      .data
       .flatMap { case (tp, data) => data.messages.iterator.toSeq.map(tp -> _) }
       .map(SimpleConsumerDeserialization.deserialize[KV])
       .toSeq
@@ -101,14 +103,14 @@ trait ViewReaderBehaviour[KV <: KeyValue] {
     val found: Set[ConsumerRecord[KV#K, KV#V]] = results
       .flatMap(_.fold(Set[ConsumerRecord[KV#K, KV#V]]())(x => Set(x)))
       .filter { event =>
-          val deserialized =
-            implicitly[KVDeserializer[KV]].deserializer(event.key(), event.value())
+        val deserialized =
+          implicitly[KVDeserializer[KV]].deserializer(event.key(), event.value())
 
-          val originalRecord =
-            view.inverseTransformation(
-              ViewRecord[KV](deserialized, event.topic(), event.partition()))
+        val originalRecord =
+          view.inverseTransformation(
+            ViewRecord[KV](deserialized, event.topic(), event.partition()))
 
-          partitioner(originalRecord) == originalTopicAndPartition
+        partitioner(originalRecord) == originalTopicAndPartition
       }
 
     val foundLast = SimpleConsumerDeserialization.lastPerTopicPartition(found)
@@ -118,7 +120,7 @@ trait ViewReaderBehaviour[KV <: KeyValue] {
     if (foundLast.nonEmpty) {
       println(s"FOUND $foundLast")
       Some(found)
-    } else if (results.isEmpty || ! results.exists(_.isDefined)) {
+    } else if (results.isEmpty || !results.exists(_.isDefined)) {
       None
     } else {
       // Try previous
