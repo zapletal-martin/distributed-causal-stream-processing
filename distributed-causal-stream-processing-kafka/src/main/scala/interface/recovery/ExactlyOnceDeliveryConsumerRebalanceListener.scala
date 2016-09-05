@@ -53,6 +53,7 @@ class ExactlyOnceDeliveryConsumerRebalanceListener[KV <: KeyValue : KVDeserializ
               .input
               .reader
               .findAllAfterLastCommitted(
+                consumer,
                 exactlyOnceDeliveryRecovery.timeout,
                 Seq(tp),
                 exactlyOnceDeliveryRecovery.input.inputGroup)
@@ -119,13 +120,13 @@ class ExactlyOnceDeliveryConsumerRebalanceListener[KV <: KeyValue : KVDeserializ
 
       println(s"TO COMMIT $toCommit")
 
-      println(s"BEFORE COMMITS ${exactlyOnceDeliveryRecovery
+      /*println(s"BEFORE COMMITS ${exactlyOnceDeliveryRecovery
         .input
         .reader
         .lastCommitedMessageInEachAssignedPartition(
           exactlyOnceDeliveryRecovery.timeout,
           exactlyOnceDeliveryRecovery.input.inputTopicsAndPartitions,
-          exactlyOnceDeliveryRecovery.input.inputGroup)}")
+          exactlyOnceDeliveryRecovery.input.inputGroup)}")*/
 
       println(s"To Commit $toCommit, group ${exactlyOnceDeliveryRecovery.input.inputGroup}")
 
@@ -134,13 +135,13 @@ class ExactlyOnceDeliveryConsumerRebalanceListener[KV <: KeyValue : KVDeserializ
         toCommit,
         exactlyOnceDeliveryRecovery.input.inputGroup)
 
-      println(s"AFTER COMMITS ${exactlyOnceDeliveryRecovery
+      /*println(s"AFTER COMMITS ${exactlyOnceDeliveryRecovery
         .input
         .reader
         .lastCommitedMessageInEachAssignedPartition(
           exactlyOnceDeliveryRecovery.timeout,
           exactlyOnceDeliveryRecovery.input.inputTopicsAndPartitions,
-          exactlyOnceDeliveryRecovery.input.inputGroup)}")
+          exactlyOnceDeliveryRecovery.input.inputGroup)}")*/
 
       println("Rebalance done")
 

@@ -101,9 +101,9 @@ object Main extends App {
       writer,
       view2))
 
-  val recoveryConsumer =
+ /* val recoveryConsumer =
     new KafkaConsumer[String, String](
-      readerProps("group1"),
+      readerProps("r1"),
       implicitly[KVDeserializer[KVImpl]].keyDeserializer,
       implicitly[KVDeserializer[KVImpl]].valueDeserializer)
 
@@ -111,21 +111,21 @@ object Main extends App {
     new KafkaConsumer[String, String](
       readerProps("r2"),
       implicitly[KVDeserializer[KVImpl]].keyDeserializer,
-      implicitly[KVDeserializer[KVImpl]].valueDeserializer)
+      implicitly[KVDeserializer[KVImpl]].valueDeserializer)*/
 
-  recoveryConsumer.subscribe(Set(topic).asJava)
-  recoveryConsumer2.subscribe(Set(topic).asJava)
+  /*recoveryConsumer.subscribe(Set(topic).asJava)
+  recoveryConsumer2.subscribe(Set(topic).asJava)*/
 
   val simpleConsumer = new SimpleConsumer("localhost", 9092, timeout.toInt, 10, "0")
   val simpleConsumer2 = new SimpleConsumer("localhost", 9092, timeout.toInt, 10, "1")
 
   val inputRecovery = InputRecovery(
-    InputReader[KVImpl](recoveryConsumer, simpleConsumer),
+    InputReader[KVImpl](simpleConsumer),
     Seq(new TopicAndPartition(topic, 0)),
     "group1")
 
   val inputRecovery2 = InputRecovery(
-    InputReader[KVImpl](recoveryConsumer2, simpleConsumer2),
+    InputReader[KVImpl](simpleConsumer2),
     Seq(new TopicAndPartition(topic, 0)),
     "group2")
 

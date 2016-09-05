@@ -10,24 +10,25 @@ import org.apache.kafka.clients.consumer.{ConsumerRecord, KafkaConsumer}
 import org.apache.kafka.common.TopicPartition
 
 final case class InputReader[KV <: KeyValue : KVDeserializer] private (
-    private val consumer: KafkaConsumer[KV#K, KV#V],
+    // private val consumer: KafkaConsumer[KV#K, KV#V],
     // SimpleConsumer is used, because in the 0.9 KafkaConsumer
     // finding message with last committed offset for a different group
     // (using the same group seems to trigger rebalance recursively)
     // is not very convenient
     private val simpleConsumer: SimpleConsumer) {
 
-  def lastCommitedMessageInEachAssignedPartition(
+  private def lastCommitedMessageInEachAssignedPartition(
+      consumer: KafkaConsumer[KV#K, KV#V],
       timeout: Long,
       topicPartition: Seq[TopicAndPartition],
       group: String
     ): Iterable[ConsumerRecord[KV#K, KV#V]] = {
 
-    val offset = simpleConsumer.fetchOffsets(new OffsetFetchRequest(group, topicPartition))
-    // val committed =
-    //   topicPartition.map(tp => tp -> consumer.committed(new TopicPartition(tp.topic, tp.partition)))
+    // val offset = simpleConsumer.fetchOffsets(new OffsetFetchRequest(group, topicPartition))
+    val committed =
+      topicPartition.map(tp => tp -> consumer.committed(new TopicPartition(tp.topic, tp.partition)))
 
-    val requestInfo = offset.requestInfo
+    /*val requestInfo = offset.requestInfo
 
     val response = simpleConsumer.fetch(
       new FetchRequest(requestInfo =
@@ -37,12 +38,16 @@ final case class InputReader[KV <: KeyValue : KVDeserializer] private (
 
     val all = response.data
       .flatMap { case (tp, data) => data.messages.iterator.toSeq.map(tp -> _) }
-      .map(SimpleConsumerDeserialization.deserialize[KV])
+      .map(SimpleConsumerDeserialization.deserialize[KV])*/
+
+    val all = committed.map(c =>
+      new ConsumerRecord[KV#K, KV#V](c._1.topic, c._1.partition, c._2.offset(), null, null))
 
     SimpleConsumerDeserialization.firstPerTopicPartition(all)
   }
 
   def findAllAfterLastCommitted(
+      consumer: KafkaConsumer[KV#K, KV#V],
       timeout: Long,
       topicPartition: Seq[TopicAndPartition],
       group: String
@@ -50,6 +55,7 @@ final case class InputReader[KV <: KeyValue : KVDeserializer] private (
 
     val lastCommittedInEachPartition =
       lastCommitedMessageInEachAssignedPartition(
+        consumer,
         timeout,
         topicPartition,
         group)
@@ -69,18 +75,25 @@ final case class InputReader[KV <: KeyValue : KVDeserializer] private (
       currentRecords: Iterable[ConsumerRecord[KV#K, KV#V]]
     ): Iterable[ConsumerRecord[KV#K, KV#V]] = {
 
-    val newRecords = simpleConsumer
-      .fetch(
-        new FetchRequest(
-          requestInfo = currentRecords
-            .map(
-              r => TopicAndPartition(r.topic(), r.partition()) ->
-                PartitionFetchInfo(r.offset(), Int.MaxValue))
-            .toMap))
+    val fetch = FetchRequest(
+      requestInfo = currentRecords
+        .map(r =>
+          TopicAndPartition(
+            r.topic(), r.partition()) -> PartitionFetchInfo(r.offset(), Int.MaxValue))
+        .toMap)
+
+    println(s"Fetching $fetch")
+
+    val fetched = simpleConsumer.fetch(fetch)
+
+    println(s"Fetched $fetched")
+    println(s"Fetched ${fetched.data.values.map(_.messages.iterator.mkString(","))}")
+
+    val newRecords = fetched
       .data
-      .flatMap { case (tp, data) => data.messages.iterator.toSeq.map(tp -> _) }
-      .map(SimpleConsumerDeserialization.deserialize[KV])
       .toSeq
+      .flatMap(tpd => tpd._2.messages.iterator.toSeq.map(tpd._1 -> _))
+      .map(SimpleConsumerDeserialization.deserialize[KV])
 
     println(s"newRecords $newRecords")
 
